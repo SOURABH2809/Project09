@@ -1,0 +1,157 @@
+
+  # Base image
+  FROM node:20-alpine AS base
+
+  WORKDIR /app
+
+  # Copy only package files for caching
+  COPY package*.json ./
+
+  # Install dependencies (all)
+  RUN npm install
+
+  # Installing infisical in Application
+  RUN apk add --no-cache curl \
+    && curl -L https://github.com/Infisical/infisical/releases/download/v0.159.19/infisical-linux-amd64 \
+      -o /usr/local/bin/infisical \
+    && chmod +x /usr/local/bin/infisical
+
+  # Development Stage (Hot Reload)
+  FROM base AS dev
+
+  # Variables for module paths to avoid hardcoding in multiple places
+  ENV AUTH_MODULE_PATH=src/modules/auth
+  ENV CUSTOMER_MODULE_PATH=src/modules/customer
+  ENV MASTER_DATA_MODULE_PATH=src/modules/master-data
+  ENV NOTIFICATION_MODULE_PATH=src/modules/notification
+  ENV DATA_MODULE_PATH=src/modules/data
+  ENV RATESHEET_MODULE_PATH=src/modules/ratesheet
+
+  COPY . .
+
+  # Generate all Prisma clients for each module
+  # Auth Module
+  RUN npx prisma generate --schema=${AUTH_MODULE_PATH}/prisma/schema.prisma
+  RUN npx prisma generate --schema=${CUSTOMER_MODULE_PATH}/prisma/schema.prisma
+  RUN npx prisma generate --schema=${MASTER_DATA_MODULE_PATH}/prisma/schema.prisma
+  RUN npx prisma generate --schema=${NOTIFICATION_MODULE_PATH}/prisma/schema.prisma
+  RUN npx prisma generate --schema=${DATA_MODULE_PATH}/prisma/schema.prisma
+  RUN npx prisma generate --schema=${RATESHEET_MODULE_PATH}/prisma/schema.prisma
+
+  EXPOSE 5001
+
+  # Run migrations at container startup in dev mode
+  CMD ["sh", "-c", "\
+      # Auth Module 
+      npx prisma migrate deploy --config=${AUTH_MODULE_PATH}/prisma.config.ts --schema=${AUTH_MODULE_PATH}/prisma/schema.prisma && \
+      # Customer Module
+      npx prisma migrate deploy --config=${CUSTOMER_MODULE_PATH}/prisma.config.ts --schema=${CUSTOMER_MODULE_PATH}/prisma/schema.prisma && \
+      # Master Data Module
+      npx prisma migrate deploy --config=${MASTER_DATA_MODULE_PATH}/prisma.config.ts --schema=${MASTER_DATA_MODULE_PATH}/prisma/schema.prisma && \
+      # Notification Module
+      npx prisma migrate deploy --config=${NOTIFICATION_MODULE_PATH}/prisma.config.ts --schema=${NOTIFICATION_MODULE_PATH}/prisma/schema.prisma && \
+      # Data Module
+      npx prisma migrate deploy --config=${DATA_MODULE_PATH}/prisma.config.ts --schema=${DATA_MODULE_PATH}/prisma/schema.prisma && \
+      # Ratesheet Module
+      npx prisma migrate deploy --config=${RATESHEET_MODULE_PATH}/prisma.config.ts --schema=${RATESHEET_MODULE_PATH}/prisma/schema.prisma && \
+      exec npm run dev \
+  "]
+
+  # ----------------------------------------
+  # Build Stage (Prod Build)
+  # ----------------------------------------
+  FROM base AS build
+
+  ENV AUTH_MODULE_PATH=src/modules/auth
+  ENV CUSTOMER_MODULE_PATH=src/modules/customer
+  ENV MASTER_DATA_MODULE_PATH=src/modules/master-data
+  ENV NOTIFICATION_MODULE_PATH=src/modules/notification
+  ENV DATA_MODULE_PATH=src/modules/data
+  ENV RATESHEET_MODULE_PATH=src/modules/ratesheet
+
+  COPY . .
+
+  # Generate all Prisma clients for each module
+  # Auth Module
+  RUN npx prisma generate --schema=${AUTH_MODULE_PATH}/prisma/schema.prisma
+
+  # Customer Module
+  RUN npx prisma generate --schema=${CUSTOMER_MODULE_PATH}/prisma/schema.prisma
+
+  # Master Data Module
+  RUN npx prisma generate --schema=${MASTER_DATA_MODULE_PATH}/prisma/schema.prisma
+
+  # Notification Module
+  RUN npx prisma generate --schema=${NOTIFICATION_MODULE_PATH}/prisma/schema.prisma
+
+  # Data Module
+  RUN npx prisma generate --schema=${DATA_MODULE_PATH}/prisma/schema.prisma
+
+  # Ratesheet Module
+  RUN npx prisma generate --schema=${RATESHEET_MODULE_PATH}/prisma/schema.prisma
+
+  # Build application
+  RUN npm run build
+
+  # Production Stage
+  FROM node:20-alpine AS prod
+
+  ENV AUTH_MODULE_PATH=src/modules/auth
+  ENV CUSTOMER_MODULE_PATH=src/modules/customer
+  ENV MASTER_DATA_MODULE_PATH=src/modules/master-data
+  ENV NOTIFICATION_MODULE_PATH=src/modules/notification
+  ENV DATA_MODULE_PATH=src/modules/data
+  ENV RATESHEET_MODULE_PATH=src/modules/ratesheet
+
+  WORKDIR /app
+
+  # Copy only prod deps
+  COPY package*.json ./
+  RUN npm ci --omit=dev --ignore-scripts
+
+  COPY start.sh /app/start.sh
+  RUN chmod +x /app/start.sh
+  RUN apk add --no-cache curl bash \
+    && curl -1sLf https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.alpine.sh | bash \
+    && apk add infisical
+
+  # Copy built app + Prisma clients + migrations
+  # Source Code
+  COPY --from=build /app/dist ./dist
+
+  # Auth Module
+  COPY --from=build /app/${AUTH_MODULE_PATH}/prisma.config.ts ./${AUTH_MODULE_PATH}/prisma.config.ts
+  COPY --from=build /app/${AUTH_MODULE_PATH}/prisma/schema.prisma ./${AUTH_MODULE_PATH}/prisma/schema.prisma
+  COPY --from=build /app/${AUTH_MODULE_PATH}/prisma/migrations ./${AUTH_MODULE_PATH}//prisma/migrations
+  COPY --from=build /app/public/assets ./public/assets
+
+  # Customer Module
+  COPY --from=build /app/${CUSTOMER_MODULE_PATH}/prisma.config.ts ./${CUSTOMER_MODULE_PATH}/prisma.config.ts
+  COPY --from=build /app/${CUSTOMER_MODULE_PATH}/prisma/schema.prisma ./${CUSTOMER_MODULE_PATH}/prisma/schema.prisma
+  COPY --from=build /app/${CUSTOMER_MODULE_PATH}/prisma/migrations ./${CUSTOMER_MODULE_PATH}/prisma/migrations
+
+  # Master Data Module
+  COPY --from=build /app/${MASTER_DATA_MODULE_PATH}/prisma.config.ts ./${MASTER_DATA_MODULE_PATH}/prisma.config.ts
+  COPY --from=build /app/${MASTER_DATA_MODULE_PATH}/prisma/schema.prisma ./${MASTER_DATA_MODULE_PATH}/prisma/schema.prisma
+  COPY --from=build /app/${MASTER_DATA_MODULE_PATH}/prisma/migrations ./${MASTER_DATA_MODULE_PATH}/prisma/migrations
+
+  # Notification Module
+  COPY --from=build /app/${NOTIFICATION_MODULE_PATH}/prisma.config.ts ./${NOTIFICATION_MODULE_PATH}/prisma.config.ts
+  COPY --from=build /app/${NOTIFICATION_MODULE_PATH}/prisma/schema.prisma ./${NOTIFICATION_MODULE_PATH}/prisma/schema.prisma
+  COPY --from=build /app/${NOTIFICATION_MODULE_PATH}/prisma/migrations ./${NOTIFICATION_MODULE_PATH}/prisma/migrations
+
+  # Data Module
+  COPY --from=build /app/${DATA_MODULE_PATH}/prisma.config.ts ./${DATA_MODULE_PATH}/prisma.config.ts
+  COPY --from=build /app/${DATA_MODULE_PATH}/prisma/schema.prisma ./${DATA_MODULE_PATH}/prisma/schema.prisma
+  COPY --from=build /app/${DATA_MODULE_PATH}/prisma/migrations ./${DATA_MODULE_PATH}/prisma/migrations
+
+  # Ratesheet Module
+  COPY --from=build /app/${RATESHEET_MODULE_PATH}/prisma.config.ts ./${RATESHEET_MODULE_PATH}/prisma.config.ts
+  COPY --from=build /app/${RATESHEET_MODULE_PATH}/prisma/schema.prisma ./${RATESHEET_MODULE_PATH}/prisma/schema.prisma
+  COPY --from=build /app/${RATESHEET_MODULE_PATH}/prisma/migrations ./${RATESHEET_MODULE_PATH}/prisma/migrations
+  
+  # Others
+  COPY --from=build /app/geo/ ./geo/
+  EXPOSE 5000
+
+  CMD ["sh", "-c", "infisical run --env=staging --projectId=$INFISICAL_PROJECT_ID -- /app/start.sh"]

@@ -1,0 +1,3 @@
+function Gauge({ percent }: { percent: number }) { return <div className="mx-auto max-w-xs"><div className="relative h-4 overflow-hidden rounded-full bg-slate-100"><div className="h-full rounded-full bg-[#5750F1]" style={{ width: `${percent}%` }} /></div><div className="mt-4 text-center"><strong className="text-3xl">{percent}%</strong><p className="text-sm text-slate-500">Available</p></div></div>; }
+
+export default function InventoryOverview() { return <section className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Inventory Overview</h2><span className="text-slate-400">•••</span></div><div className="py-10"><Gauge percent={63} /></div></section>; }

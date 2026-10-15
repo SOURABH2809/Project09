@@ -1,0 +1,580 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../database/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["auth"]
+}
+
+model User {
+  id String @id @default(uuid())
+
+  email           String  @unique
+  firstName       String
+  lastName        String
+  profileImageUrl String?
+
+  passwordHash          String?
+  passwordChangedAt     DateTime?
+  passwordResetRequired Boolean   @default(false)
+
+  accountActive       Boolean   @default(false)
+  lastLoginAt         DateTime?
+  failedLoginAttempts Int       @default(0)
+  lastLoginFailedAt   DateTime?
+  deletedAt           DateTime?
+
+  userType UserType @default(INTERNAL)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  // Roles
+  roleCreatedBy UserRoles[] @relation("roleCreatedBy")
+  roleUpdatedBy UserRoles[] @relation("roleUpdatedBy")
+
+  // Permissions table audits
+  permissionCreatedBy UserPermissions[] @relation("permissionCreatedBy")
+  permissionUpdatedBy UserPermissions[] @relation("permissionUpdatedBy")
+
+  // Role-Permission mapping audits
+  permissionMapCreatedBy UserPermissionRoleMap[] @relation("permissionMapCreatedBy")
+  permissionMapUpdatedBy UserPermissionRoleMap[] @relation("permissionMapUpdatedBy")
+  permissionMapDeletedBy UserPermissionRoleMap[] @relation("permissionMapDeletedBy")
+
+  // Group audits
+  groupCreatedBy UserGroup[]    @relation("groupCreatedBy")
+  groupUpdatedBy UserGroup[]    @relation("groupUpdatedBy")
+  userGroup      UserGroupMap[]
+
+  // User Identity
+  userIdentity UserIdentity[]
+
+  // Multi-Tenant Customer Admin System Relations
+  userCustomerMappings         UserCustomerMapping[] @relation("userCustomerMappingUser")
+  userCustomerMappingCreatedBy UserCustomerMapping[] @relation("userCustomerMappingCreatedBy")
+
+  customerAdmins          CustomerAdmin[] @relation("customerAdminUser")
+  customerAdminAssignedBy CustomerAdmin[] @relation("customerAdminAssignedBy")
+
+  customerRoles         CustomerRole[] @relation("customerRoleCreatedBy")
+  customerRoleUpdatedBy CustomerRole[] @relation("customerRoleUpdatedBy")
+
+  customerRolePermissions CustomerRolePermission[] @relation("customerRolePermissionCreatedBy")
+
+  customerGroups         CustomerGroup[] @relation("customerGroupCreatedBy")
+  customerGroupUpdatedBy CustomerGroup[] @relation("customerGroupUpdatedBy")
+
+  customerUserRoleMaps       CustomerUserRoleMap[] @relation("customerUserRoleUser")
+  customerUserRoleAssignedBy CustomerUserRoleMap[] @relation("customerUserRoleAssignedBy")
+
+  customerUserGroupMaps       CustomerUserGroupMap[] @relation("customerUserGroupUser")
+  customerUserGroupAssignedBy CustomerUserGroupMap[] @relation("customerUserGroupAssignedBy")
+
+  customerGroupRoleAssignedBy CustomerGroupRoleMap[] @relation("customerGroupRoleAssignedBy")
+
+  userActiveCustomer        UserActiveCustomer[]
+  customerActivityLogs      CustomerActivityLog[]      @relation("customerActivityLogActor")
+  customerContextSwitchLogs CustomerContextSwitchLog[] @relation("customerContextSwitchLogUser")
+
+  @@index([email])
+  @@index([deletedAt])
+  @@map("users")
+  @@schema("auth")
+}
+
+enum UserType {
+  INTERNAL
+  CUSTOMER
+
+  @@schema("auth")
+}
+
+model UserGroup {
+  id String @id @default(uuid())
+
+  name           String  @unique
+  normalizedName String  @unique
+  description    String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  createdById String
+  createdBy   User   @relation("groupCreatedBy", fields: [createdById], references: [id])
+
+  updatedById String?
+  updatedBy   User?   @relation("groupUpdatedBy", fields: [updatedById], references: [id])
+
+  userGroupMap UserGroupMap[]
+  groupRoleMap UserGroupRoleMap[]
+
+  @@map("user_groups")
+  @@schema("auth")
+}
+
+model UserGroupMap {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  groupId String
+  group   UserGroup @relation(fields: [groupId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, groupId])
+  @@map("user_group_map")
+  @@schema("auth")
+}
+
+model UserRoles {
+  id String @id @default(uuid())
+
+  name           String  @unique
+  normalizedName String  @unique
+  description    String?
+
+  createdById String
+  createdBy   User   @relation("roleCreatedBy", fields: [createdById], references: [id])
+
+  updatedById String?
+  updatedBy   User?   @relation("roleUpdatedBy", fields: [updatedById], references: [id])
+
+  userGroupRoleMap    UserGroupRoleMap[]
+  userRolePermissions UserPermissionRoleMap[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("user_roles")
+  @@schema("auth")
+}
+
+model UserGroupRoleMap {
+  id String @id @default(uuid())
+
+  groupId String
+  group   UserGroup @relation(fields: [groupId], references: [id])
+
+  roleId String
+  role   UserRoles @relation(fields: [roleId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([groupId, roleId])
+  @@map("user_group_role_map")
+  @@schema("auth")
+}
+
+model UserPermissions {
+  id             String @id @default(uuid())
+  name           String @unique
+  normalizedName String @unique
+
+  description String?
+
+  action String
+
+  // New grouping fields
+  resourceKey  String
+  resourceName String
+
+  subFeatureKey  String?
+  subFeatureName String?
+
+  pageKey  String
+  pageName String
+
+  moduleName String
+
+  createdAt             DateTime @default(now())
+  permissionCreatedById String
+  permissionCreatedBy   User     @relation("permissionCreatedBy", fields: [permissionCreatedById], references: [id])
+
+  updatedAt             DateTime @updatedAt
+  permissionUpdatedById String?
+  permissionUpdatedBy   User?    @relation("permissionUpdatedBy", fields: [permissionUpdatedById], references: [id])
+
+  userPermissionsRoleMap  UserPermissionRoleMap[]
+  customerRolePermissions CustomerRolePermission[]
+
+  @@map("user_permissions")
+  @@schema("auth")
+}
+
+model UserPermissionRoleMap {
+  id String @id @default(uuid())
+
+  roleId              String
+  userPermissionRoles UserRoles @relation(fields: [roleId], references: [id])
+
+  permissionId    String
+  userPermissions UserPermissions @relation(fields: [permissionId], references: [id])
+
+  deletedAt                DateTime?
+  permissionMapDeletedById String?
+  permissionMapDeletedBy   User?     @relation("permissionMapDeletedBy", fields: [permissionMapDeletedById], references: [id])
+
+  createdAt                DateTime @default(now())
+  permissionMapCreatedById String
+  permissionMapCreatedBy   User     @relation("permissionMapCreatedBy", fields: [permissionMapCreatedById], references: [id])
+
+  updatedAt                DateTime @updatedAt
+  permissionMapUpdatedById String?
+  permissionMapUpdatedBy   User?    @relation("permissionMapUpdatedBy", fields: [permissionMapUpdatedById], references: [id])
+
+  @@unique([roleId, permissionId, deletedAt])
+  @@map("user_permission_role_map")
+  @@schema("auth")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+  @@schema("auth")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  tokenHash String
+  userId    String
+  revoked   Boolean  @default(false)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@map("refresh_tokens")
+  @@schema("auth")
+}
+
+model UserIdentity {
+  id             String       @id @default(uuid())
+  userId         String
+  provider       AuthProvider
+  providerUserId String
+  providerEmail  String?
+
+  user User @relation(fields: [userId], references: [id])
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerUserId])
+  @@map("user_identity")
+  @@schema("auth")
+}
+
+enum AuthProvider {
+  Google
+  Azure
+
+  @@schema("auth")
+}
+
+// MULTI-TENANT CUSTOMER ADMIN SYSTEM
+
+model UserCustomerMapping {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation("userCustomerMappingUser", fields: [userId], references: [id])
+
+  customerId String? @db.Uuid
+
+  isActive  Boolean @default(true)
+  roleScope String? // TODO: Remove if not needed
+
+  createdById String
+  createdBy   User   @relation("userCustomerMappingCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([userId, customerId])
+  @@index([userId])
+  @@index([customerId])
+  @@index([isActive])
+  @@index([createdById])
+  @@map("user_customer_mapping")
+  @@schema("auth")
+}
+
+model CustomerAdmin {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation("customerAdminUser", fields: [userId], references: [id])
+
+  customerId String @db.Uuid
+
+  isActive Boolean @default(true)
+
+  assignedById String
+  assignedBy   User   @relation("customerAdminAssignedBy", fields: [assignedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  @@unique([userId, customerId])
+  @@index([customerId])
+  @@index([userId])
+  @@index([isActive])
+  @@index([deletedAt])
+  @@map("customer_admins")
+  @@schema("auth")
+}
+
+model CustomerRole {
+  id String @id @default(uuid())
+
+  name           String
+  normalizedName String
+  description    String?
+
+  customerId String? @db.Uuid
+
+  createdById String
+  createdBy   User   @relation("customerRoleCreatedBy", fields: [createdById], references: [id])
+
+  updatedById String?
+  updatedBy   User?   @relation("customerRoleUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  customerUserRoleMaps    CustomerUserRoleMap[]
+  customerGroupRoleMaps   CustomerGroupRoleMap[]
+  customerRolePermissions CustomerRolePermission[]
+
+  @@index([customerId])
+  @@index([createdById])
+  @@index([deletedAt])
+  @@map("customer_roles")
+  @@schema("auth")
+}
+
+model CustomerRolePermission {
+  id String @id @default(uuid())
+
+  customerRoleId String
+  customerRole   CustomerRole @relation(fields: [customerRoleId], references: [id])
+
+  permissionId String
+  permission   UserPermissions @relation(fields: [permissionId], references: [id])
+
+  createdById String
+  createdBy   User   @relation("customerRolePermissionCreatedBy", fields: [createdById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([customerRoleId, permissionId])
+  @@index([customerRoleId])
+  @@index([permissionId])
+  @@map("customer_role_permissions")
+  @@schema("auth")
+}
+
+model CustomerGroup {
+  id String @id @default(uuid())
+
+  name           String
+  normalizedName String
+  description    String?
+
+  customerId String @db.Uuid
+
+  createdById String
+  createdBy   User   @relation("customerGroupCreatedBy", fields: [createdById], references: [id])
+
+  updatedById String?
+  updatedBy   User?   @relation("customerGroupUpdatedBy", fields: [updatedById], references: [id])
+
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+
+  // Relations
+  customerUserGroupMaps CustomerUserGroupMap[]
+  customerGroupRoleMaps CustomerGroupRoleMap[]
+
+  @@index([customerId])
+  @@index([createdById])
+  @@index([deletedAt])
+  @@map("customer_groups")
+  @@schema("auth")
+}
+
+model CustomerUserRoleMap {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation("customerUserRoleUser", fields: [userId], references: [id])
+
+  customerRoleId String
+  customerRole   CustomerRole @relation(fields: [customerRoleId], references: [id])
+
+  customerId String
+
+  assignedById String
+  assignedBy   User   @relation("customerUserRoleAssignedBy", fields: [assignedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, customerRoleId])
+  @@index([userId])
+  @@index([customerRoleId])
+  @@index([customerId])
+  @@map("customer_user_role_map")
+  @@schema("auth")
+}
+
+model CustomerUserGroupMap {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation("customerUserGroupUser", fields: [userId], references: [id])
+
+  customerGroupId String
+  customerGroup   CustomerGroup @relation(fields: [customerGroupId], references: [id])
+
+  customerId String
+
+  assignedById String
+  assignedBy   User   @relation("customerUserGroupAssignedBy", fields: [assignedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([userId, customerGroupId])
+  @@index([userId])
+  @@index([customerGroupId])
+  @@index([customerId])
+  @@map("customer_user_group_map")
+  @@schema("auth")
+}
+
+model CustomerGroupRoleMap {
+  id String @id @default(uuid())
+
+  customerGroupId String
+  customerGroup   CustomerGroup @relation(fields: [customerGroupId], references: [id])
+
+  customerRoleId String
+  customerRole   CustomerRole @relation(fields: [customerRoleId], references: [id])
+
+  customerId String
+
+  assignedById String
+  assignedBy   User   @relation("customerGroupRoleAssignedBy", fields: [assignedById], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@unique([customerGroupId, customerRoleId])
+  @@index([customerGroupId])
+  @@index([customerRoleId])
+  @@index([customerId])
+  @@map("customer_group_role_map")
+  @@schema("auth")
+}
+
+// Context Switching for Multi-Tenancy
+model UserActiveCustomer {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  customerId String? @db.Uuid
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId])
+  @@index([customerId])
+  @@map("user_active_customer")
+  @@schema("auth")
+}
+
+enum CustomerAuditStatus {
+  SUCCESS
+  FAILED
+
+  @@schema("auth")
+}
+
+model CustomerActivityLog {
+  id String @id @default(uuid())
+
+  customerId String @db.Uuid
+
+  actorUserId   String
+  actorUser     User   @relation("customerActivityLogActor", fields: [actorUserId], references: [id])
+  actorUserName String
+
+  actionType   String
+  resourceType String
+  resourceId   String?
+  resourceName String?
+
+  beforeState Json?
+  afterState  Json?
+
+  status    CustomerAuditStatus @default(SUCCESS)
+  createdAt DateTime            @default(now())
+
+  @@index([customerId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([actionType])
+  @@map("customer_activity_logs")
+  @@schema("auth")
+}
+
+model CustomerContextSwitchLog {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation("customerContextSwitchLogUser", fields: [userId], references: [id])
+
+  fromCustomerId String? @db.Uuid
+  toCustomerId   String  @db.Uuid
+
+  status                    CustomerAuditStatus @default(SUCCESS)
+  previousContextDurationMs Int?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@index([toCustomerId, createdAt])
+  @@map("customer_context_switch_logs")
+  @@schema("auth")
+}

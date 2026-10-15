@@ -1,0 +1,97 @@
+stages:
+  - lint
+  - test
+  - build
+  - deploy
+
+lint:
+  stage: lint
+  image: node:20-alpine
+  script:
+    - echo "Disabling husky"
+    - export HUSKY=0
+
+    - echo "Installing dependencies"
+    - npm ci --silent
+    
+    - echo "Running ESLint across all services"
+    - npm run lint
+
+    - echo "Running Prettier across all services"
+    - npm run format
+
+test:
+  stage: test
+  image: node:20-alpine
+  script: 
+    - echo "Test cases"
+
+.build-template:
+  stage: build
+  image: docker:29
+
+  services:
+    - name: docker:29-dind
+      alias: docker
+      entrypoint: ["dockerd-entrypoint.sh", "--tls=false"]
+
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+
+    
+  before_script:
+    - echo "$DOCKER_REGISTRY_TOKEN" | docker login --username "$DOCKER_REGISTRY_USER" --password-stdin
+  rules:
+    # MR pipeline
+    # - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "staging"'
+
+    # Push pipeline (but NOT from MR)
+    # - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE == "push"'
+
+      # Run for any push to staging (merge OR direct push)
+    - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE == "push"'
+
+    - when: never
+
+build-app:
+  stage: build
+  extends: .build-template
+  script:
+  - echo "Building docker image"
+  - docker build -t $DOCKER_REGISTRY_USER/voiped-api:$CI_COMMIT_SHORT_SHA -t $DOCKER_REGISTRY_USER/voiped-api:latest -f Dockerfile.staging .
+
+  - echo "Pushing docker image"
+  - docker push $DOCKER_REGISTRY_USER/voiped-api:$CI_COMMIT_SHORT_SHA
+  - docker push $DOCKER_REGISTRY_USER/voiped-api:latest
+
+deploy:
+  stage: deploy
+  before_script:
+    - apk add --no-cache openssh-client sshpass
+    - echo "Tools installed"
+  script:
+    - mkdir -p "$HOME/.ssh"
+    - chmod 700 "$HOME/.ssh"
+
+    - ssh-keyscan -H "$STG_BACKEND_VM_HOST" >> ~/.ssh/known_hosts
+
+    # Copy file to VM
+    - sshpass -p "$STG_BACKEND_VM_PASS" scp -o StrictHostKeyChecking=no docker-compose.staging.yml "$STG_BACKEND_VM_USERNAME@$STG_BACKEND_VM_HOST:/home/$STG_BACKEND_VM_USERNAME/"
+
+    # Run docker file
+    - sshpass -p "$STG_BACKEND_VM_PASS" ssh -o StrictHostKeyChecking=no "$STG_BACKEND_VM_USERNAME@$STG_BACKEND_VM_HOST" "IMAGE_TAG=$DOCKER_REGISTRY_USER/voiped-api:$CI_COMMIT_SHORT_SHA docker compose -f docker-compose.staging.yml up -d --remove-orphans"
+
+
+  rules:
+  # MR pipeline
+    # - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_TARGET_BRANCH_NAME == "staging"'
+
+    # Push pipeline (but NOT from MR)
+    # - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE == "push"'
+
+      # Run for any push to staging (merge OR direct push)
+    - if: '$CI_COMMIT_BRANCH == "staging" && $CI_PIPELINE_SOURCE == "push"'
+
+    - when: never
+    

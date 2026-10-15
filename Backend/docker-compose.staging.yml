@@ -1,0 +1,23 @@
+services:
+  app:
+    image: ${IMAGE_TAG}
+    container_name: app-blue-1
+    environment:
+      INFISICAL_TOKEN: ${INFISICAL_TOKEN}
+      INFISICAL_PROJECT_ID: ${INFISICAL_PROJECT_ID}
+      INFISICAL_API_URL: ${INFISICAL_API_URL}
+      NODE_ENV: staging
+    ports:
+      - "5000:5000"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5000/health || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+networks:
+  app-network:
+    driver: bridge

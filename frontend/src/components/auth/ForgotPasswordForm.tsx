@@ -1,0 +1,7 @@
+"use client";
+import { FormEvent, useState } from "react";
+import { useForgotPasswordMutation } from "@/features/auth/hooks";
+import { forgotPasswordSchema } from "@/features/auth/schemas";
+import { getApiErrorMessage } from "@/lib/api/client";
+import { toast } from "react-toastify";
+export default function ForgotPasswordForm() { const mutation = useForgotPasswordMutation(); const [message, setMessage] = useState(""); const submit = async (e: FormEvent<HTMLFormElement>) => { e.preventDefault(); const parsed = forgotPasswordSchema.safeParse({ email: new FormData(e.currentTarget).get("email") }); if (!parsed.success) { toast.error(parsed.error.issues[0].message); return setMessage(parsed.error.issues[0].message); } try { await mutation.mutateAsync(parsed.data); setMessage("If the email exists, a reset link has been sent."); toast.success("Reset link request submitted."); } catch (error) { const errorMessage = getApiErrorMessage(error); toast.error(errorMessage); setMessage(errorMessage); } }; return <form onSubmit={submit} className="mx-auto mt-20 max-w-md space-y-4 rounded-xl bg-white p-6 shadow"><h1 className="text-2xl font-bold">Forgot password</h1><input name="email" type="email" required placeholder="Email address" className="w-full rounded border p-3" /><button className="w-full rounded bg-indigo-600 p-3 font-semibold text-white">Send reset link</button>{message && <p role="status">{message}</p>}</form>; }

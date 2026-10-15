@@ -1,0 +1,14 @@
+node_modules
+dist
+build
+coverage
+**/generated/**
+.env*
+**/tsconfig.json
+docker-compose.yml
+readme.md
+config
+.gitlab-ci.yml
+package*.json
+*config.cjs
+docker-compose*.yml

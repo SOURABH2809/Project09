@@ -1,0 +1,60 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client"
+  output   = "../database/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  schemas  = ["notification"]
+}
+
+model InAppNotification {
+  id          String   @id @default(uuid())
+  userId      String   @db.Uuid
+
+  title       String
+  message     String
+  link        String?
+
+  type        InAppNotificationType @default(GENERAL)
+  severity    InAppNotificationSeverity @default(INFO)
+  read        Boolean  @default(false)
+
+  deletedAt   DateTime?
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("in_app_notifications")
+  @@schema("notification")
+}
+
+enum InAppNotificationType {
+  GENERAL
+  SYSTEM
+  ACCOUNT
+  BILLING
+  TRANSACTION
+  SECURITY
+  PERMISSION
+  REMINDER
+  ANNOUNCEMENT
+
+  @@schema("notification")
+}
+
+enum InAppNotificationSeverity {
+  INFO
+  SUCCESS
+  WARNING
+  ERROR
+  CRITICAL
+
+  @@schema("notification")
+}

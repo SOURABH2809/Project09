@@ -1,0 +1,5 @@
+import { products } from "@/features/dashboard/mockData";
+import DashboardIcon from "./DashboardIcon";
+import Trend from "./Trend";
+
+export default function TopProducts() { return <section className="rounded-xl border border-slate-200 bg-white p-5"><div className="flex items-center justify-between"><h2 className="text-sm font-semibold">Top Product</h2><span className="text-slate-400">•••</span></div><ul className="mt-3 divide-y divide-slate-100">{products.map((product) => <li key={product.name} className="flex items-center gap-3 py-3"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500"><DashboardIcon name="box" className="h-4 w-4" /></span><div className="min-w-0 flex-1"><p className="truncate text-sm font-medium">{product.name}</p><p className="text-xs text-slate-500">{product.sales} sales · #{product.rank}</p></div><div className="text-right"><p className="text-sm font-semibold">{product.revenue}</p><Trend value={product.growth} up /></div></li>)}</ul></section>; }

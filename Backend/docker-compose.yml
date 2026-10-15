@@ -1,0 +1,165 @@
+services:
+
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    ports:
+      - "${DB_PORT}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h localhost -p 5432 -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    restart: always
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
+    networks:
+      - app-network
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT}:6369"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - app-network
+  libretranslate:
+    image: libretranslate/libretranslate
+    ports:
+      - "5005:5000"
+    environment:
+      - LT_DISABLE_FILES_TRANSLATION=false
+      - LT_LOAD_ONLY=en,es,fr,de,nl
+      - LT_UPDATE_MODELS=false
+    networks:
+      - app-network
+
+  app:
+    build:
+      context: .
+      target: prod
+    restart: always
+    extra_hosts:
+      - "sippy-sbc3:185.209.151.21"
+      - "sippy-sbc4:185.209.148.24"
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      libretranslate:
+        condition: service_started
+    environment:
+      ACCESS_TOKEN_SECRET: ${ACCESS_TOKEN_SECRET}
+      REFRESH_TOKEN_SECRET: ${REFRESH_TOKEN_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
+      PORT: ${PORT}
+      BASE_URL: ${BASE_URL}
+      RABBITMQ_URL: ${RABBITMQ_URL}
+      SENDER_EMAIL: ${SENDER_EMAIL}
+      MICROSOFT_GRAPH_URL: ${MICROSOFT_GRAPH_URL}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID}
+      AZURE_SECRET_VALUE: ${AZURE_SECRET_VALUE}
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID}
+      SESSION_TTL: ${SESSION_TTL}
+      REDIS_HOST: ${REDIS_HOST}
+      REDIS_PORT: ${REDIS_PORT}
+      NODE_ENV: ${NODE_ENV}
+      FE_RESET_PASSWORD_PAGE_URL: ${FE_RESET_PASSWORD_PAGE_URL}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      FRONTEND_URL: ${FRONTEND_URL}
+      GOOGLE_AUTH_REDIRECT_URL: ${GOOGLE_AUTH_REDIRECT_URL}
+      GOOGLE_CODE_EXCHANGE_URL: ${GOOGLE_CODE_EXCHANGE_URL}
+      USER_PERMISSION_CACHE_TTL: ${USER_PERMISSION_CACHE_TTL}
+      LAST_USED_CONTEXT_TTL: ${LAST_USED_CONTEXT_TTL}
+
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID}
+      MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI}
+      MICROSOFT_AUTH_URL: ${MICROSOFT_AUTH_URL}
+      MICROSOFT_TOKEN_URL: ${MICROSOFT_TOKEN_URL}
+      PHIBEE_PASSKEY: ${PHIBEE_PASSKEY}
+      PHIBEE_TOKEN: ${PHIBEE_TOKEN}
+      PHIBEE_BASE_URL: ${PHIBEE_BASE_URL}
+      PHIBEE_USE_MOCK: ${PHIBEE_USE_MOCK}
+      NEXTPERTISE_BASIC_AUTH: ${NEXTPERTISE_BASIC_AUTH}
+      NEXTPERTISE_BASE_URL: ${NEXTPERTISE_BASE_URL}
+      NEXTPERTISE_AUTH_URL: ${NEXTPERTISE_AUTH_URL}
+      NEXTPERTISE_COVERAGE_URL: ${NEXTPERTISE_COVERAGE_URL}
+      NEXTPERTISE_TOTP_SECRET: ${NEXTPERTISE_TOTP_SECRET}
+      VODAFONE_ZIGGO_BASE_URL: ${VODAFONE_ZIGGO_BASE_URL}
+      VODAFONE_ZIGGO_AUTH_URL: ${VODAFONE_ZIGGO_AUTH_URL}
+      VODAFONE_ZIGGO_COVERAGE_URL: ${VODAFONE_ZIGGO_COVERAGE_URL}
+      VODAFONE_ZIGGO_CLIENT_ID: ${VODAFONE_ZIGGO_CLIENT_ID}
+      VODAFONE_ZIGGO_CLIENT_SECRET: ${VODAFONE_ZIGGO_CLIENT_SECRET}
+      VODAFONE_ZIGGO_PRODUCT_GROUP: ${VODAFONE_ZIGGO_PRODUCT_GROUP}
+      VODAFONE_ZIGGO_TIMEOUT_MS: ${VODAFONE_ZIGGO_TIMEOUT_MS}
+      ESIGNATURES_SECRET_TOKEN: ${ESIGNATURES_SECRET_TOKEN}
+      ESIGNATURES_WEBHOOK_URL: ${ESIGNATURES_WEBHOOK_URL}
+      ESIGNATURES_API_BASE_URL: ${ESIGNATURES_API_BASE_URL}
+      ESIGNATURES_TEMPLATE_ID: ${ESIGNATURES_TEMPLATE_ID}
+      STORAGE_PATH: /app/storage
+      MAPBOX_PUBLIC_TOKEN: ${MAPBOX_PUBLIC_TOKEN}
+      GOOGLE_GEO_API_KEY: ${GOOGLE_GEO_API_KEY}
+      HERE_GEO_API_KEY: ${HERE_GEO_API_KEY}
+      SIPPY_USE_MOCK: ${SIPPY_USE_MOCK}
+      SIPPY_SBC3_URL: ${SIPPY_SBC3_URL}
+      SIPPY_SBC4_URL: ${SIPPY_SBC4_URL}
+      SIPPY_SBC5_URL: ${SIPPY_SBC5_URL}
+      SIPPY_SBC7_URL: ${SIPPY_SBC7_URL}
+      METASWITCH_USE_MOCK: ${METASWITCH_USE_MOCK}
+      METASWITCH_AMS_302_URL: ${METASWITCH_AMS_302_URL}
+      METASWITCH_MAD_302_URL: ${METASWITCH_MAD_302_URL}
+    ports:
+      - "${PORT}:5001"
+    volumes:
+      - storage_data:/app/storage
+    networks:
+      - app-network
+
+volumes:
+  db_data:
+  rabbitmq_data:
+  redis_data:
+  storage_data:
+
+networks:
+  app-network:
+    driver: bridge
